@@ -42,14 +42,15 @@ class YouVersionClient:
         self,
         language_ranges: list[str] | None = None,
         all_available: bool = False,
-        page_size: int = 100,
+        page_size: int = 99,
         page_token: str | None = None,
     ) -> dict:
         ranges = language_ranges or ["en"]
         params: list[tuple[str, str | int | bool]] = [
             ("page_size", page_size),
-            ("all_available", str(all_available).lower()),
         ]
+        if all_available:
+            params.append(("all_available", "true"))
         for language in ranges:
             params.append(("language_ranges[]", language))
         if page_token:
