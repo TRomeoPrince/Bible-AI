@@ -26,7 +26,9 @@ class StudyAI:
         context: dict[str, Any] = {}
         if reference and self.iq.configured:
             try:
-                context["iq_bible"] = await self.iq.ai_context(reference)
+                parsed = parse_reference(reference)
+                compact = to_usfm(parsed.book, parsed.chapter, parsed.start_verse, parsed.end_verse)
+                context["iq_bible"] = await self.iq.ai_context(compact)
             except Exception as exc:
                 context["iq_bible_error"] = str(exc)
         return context
