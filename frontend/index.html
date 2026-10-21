@@ -7,43 +7,129 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main>
-    <header>
-      <h1>Bible-AI</h1>
-      <p>Scripture study with source-aware retrieval.</p>
-    </header>
+  <div class="shell">
+    <aside>
+      <div class="brand">Bible-AI</div>
+      <p class="tagline">Scripture • Languages • Theology • Study</p>
+      <nav>
+        <button class="nav active" data-view="ask">Ask Bible-AI</button>
+        <button class="nav" data-view="scripture">Scripture</button>
+        <button class="nav" data-view="compare">Compare</button>
+        <button class="nav" data-view="word">Word Study</button>
+        <button class="nav" data-view="memory">Study Memory</button>
+      </nav>
+      <div id="provider-status" class="provider-status">Checking providers…</div>
+    </aside>
 
-    <section class="card">
-      <form id="lookup-form">
-        <label for="reference">Bible reference</label>
-        <div class="row">
-          <input id="reference" value="John 3:3" placeholder="John 3:3">
-          <select id="translation"></select>
-          <button type="submit">Lookup</button>
+    <main>
+      <section id="view-ask" class="view active">
+        <div class="hero">
+          <div class="eyebrow">PERSONAL BIBLE SCHOLAR</div>
+          <h1>Study Scripture seriously.</h1>
+          <p>Ask about a passage, doctrine, historical context, apologetics, or original-language meaning.</p>
         </div>
-      </form>
-    </section>
 
-    <section id="status" class="status"></section>
+        <div class="card">
+          <div class="grid two">
+            <div>
+              <label>Preferred translation</label>
+              <select id="chat-translation"></select>
+            </div>
+            <div>
+              <label>Study mode</label>
+              <select id="chat-mode">
+                <option value="study">Bible Study</option>
+                <option value="theology">Theology Comparison</option>
+                <option value="apologetics">Apologetics</option>
+                <option value="history">Church / Biblical History</option>
+                <option value="language">Original Language</option>
+              </select>
+            </div>
+          </div>
+          <textarea id="question" rows="5" placeholder="e.g. Explain John 3:3 in context and show the important Greek words."></textarea>
+          <button id="ask-btn" class="primary">Ask Bible-AI</button>
+        </div>
 
-    <section id="scripture" class="card hidden">
-      <div class="section-label">SCRIPTURE</div>
-      <h2 id="passage-title"></h2>
-      <div id="passage-text"></div>
-      <p id="attribution" class="muted"></p>
-    </section>
+        <div id="chat-status" class="status"></div>
+        <section id="scripture-answer" class="card hidden"></section>
+        <section id="ai-answer" class="card hidden"></section>
+      </section>
 
-    <section class="card">
-      <div class="section-label">STUDY NOTE</div>
-      <textarea id="note" rows="5" placeholder="Write a note about this passage..."></textarea>
-      <button id="save-note" type="button">Save note</button>
-    </section>
+      <section id="view-scripture" class="view">
+        <h2>Scripture Lookup</h2>
+        <div class="card">
+          <div class="grid three">
+            <input id="reference" value="John 3:3" placeholder="John 3:3">
+            <select id="translation"></select>
+            <button id="lookup-btn" class="primary">Lookup</button>
+          </div>
+        </div>
+        <div id="lookup-status" class="status"></div>
+        <section id="scripture" class="card hidden"></section>
 
-    <section class="card">
-      <div class="section-label">TRANSLATIONS</div>
-      <div id="translations-list"></div>
-    </section>
-  </main>
+        <section class="card">
+          <div class="section-label">STUDY NOTE</div>
+          <textarea id="note" rows="4" placeholder="Write a note about the current passage…"></textarea>
+          <button id="save-note">Save note</button>
+        </section>
+      </section>
+
+      <section id="view-compare" class="view">
+        <h2>Parallel Translation Comparison</h2>
+        <div class="card">
+          <label>Reference</label>
+          <input id="compare-reference" value="John 3:3">
+          <label>Translations</label>
+          <input id="compare-translations" value="KJV,NIV,BSB" placeholder="KJV,NIV,BSB">
+          <button id="compare-btn" class="primary">Compare</button>
+        </div>
+        <div id="compare-status" class="status"></div>
+        <div id="comparison-results"></div>
+      </section>
+
+      <section id="view-word" class="view">
+        <h2>Original-Language & Lexicon Study</h2>
+        <div class="card">
+          <div class="grid two">
+            <div>
+              <label>Passage context</label>
+              <input id="word-reference" value="John 3:16" placeholder="John 3:16">
+              <button id="context-btn">Load study context</button>
+            </div>
+            <div>
+              <label>Strong's number</label>
+              <input id="strong-number" value="G26" placeholder="G26 or H7225">
+              <button id="strong-btn">Look up Strong's</button>
+            </div>
+          </div>
+        </div>
+        <div id="word-status" class="status"></div>
+        <pre id="word-results" class="card code hidden"></pre>
+      </section>
+
+      <section id="view-memory" class="view">
+        <h2>Study Memory</h2>
+        <div class="grid two">
+          <section class="card">
+            <div class="section-label">MEMORIZATION</div>
+            <input id="memory-reference" placeholder="Romans 8:28">
+            <input id="memory-translation" value="KJV" placeholder="KJV">
+            <button id="memorize-btn">Add verse</button>
+            <div id="memorization-list"></div>
+          </section>
+
+          <section class="card">
+            <div class="section-label">STUDY PLAN</div>
+            <input id="plan-title" placeholder="Romans Study">
+            <input id="plan-topic" placeholder="Life in the Spirit">
+            <input id="plan-days" type="number" value="7" min="1" max="365">
+            <button id="plan-btn">Generate plan</button>
+            <div id="plan-output"></div>
+          </section>
+        </div>
+      </section>
+    </main>
+  </div>
 
   <script src="/app.js"></script>
 </body>
