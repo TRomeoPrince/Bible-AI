@@ -21,7 +21,7 @@ class ScriptureService:
     def __init__(self):
         self.youversion = YouVersionClient()
 
-    async def list_translations(self, language: str = "en") -> list[dict]:
+    async def list_translations(self, language: str = "en", include_unlicensed: bool = False) -> list[dict]:
         items: list[dict] = []
         for local in local_provider.translations():
             items.append({
@@ -34,15 +34,23 @@ class ScriptureService:
 
         if self.youversion.configured:
             try:
-                for bible in await self.youversion.get_all_bibles([language]):
+                licensed_ids = {
+                    int(b.get("id")) for b in await self.youversion.get_all_bibles([language], all_available=False)
+                    if b.get("id") is not None
+                }
+                catalog = await self.youversion.get_all_bibles([language], all_available=include_unlicensed)
+                for bible in catalog:
                     code = bible.get("localized_abbreviation") or bible.get("abbreviation") or str(bible.get("id"))
                     name = bible.get("localized_title") or bible.get("title") or bible.get("name") or code
+                    bible_id = bible.get("id")
+                    licensed = int(bible_id) in licensed_ids if bible_id is not None else False
                     items.append({
                         "code": code,
                         "name": name,
                         "provider": "youversion",
-                        "available": True,
-                        "bible_id": bible.get("id"),
+                        "available": licensed,
+                        "licensed": licensed,
+                        "bible_id": bible_id,
                         "copyright": bible.get("copyright"),
                         "attribution": bible.get("copyright") or bible.get("info"),
                     })
