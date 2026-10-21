@@ -7,3 +7,7 @@ data/private_translations/*
 !data/private_translations/.gitkeep
 data/cache/*
 !data/cache/.gitkeep
+data/lexicons/*
+!data/lexicons/.gitkeep
+data/original_languages/*
+!data/original_languages/.gitkeep
