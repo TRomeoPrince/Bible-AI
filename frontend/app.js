@@ -45,7 +45,7 @@ async function loadProviders() {
     const bits = [
       "YouVersion " + (p.youversion.configured ? "✓" : "—"),
       "IQ Bible " + (p.iqbible.configured ? "✓" : "—"),
-      "Ollama " + (p.ollama.configured ? "✓" : "—"),
+      "Ollama " + (p.ollama.configured ? (p.ollama.model_available ? "✓" : "⚠ model") : "—"),
     ];
     $("#provider-status").textContent = bits.join(" · ");
   } catch {
@@ -55,7 +55,7 @@ async function loadProviders() {
 
 async function loadTranslations() {
   try {
-    translations = await api("/api/translations?language=en");
+    translations = await api("/api/translations?language=en&include_unlicensed=true");
   } catch (e) {
     translations = [];
     setStatus("#chat-status", "Could not load translations: " + e.message);
@@ -68,7 +68,10 @@ async function loadTranslations() {
       const option = document.createElement("option");
       option.value = item.code;
       option.dataset.bibleId = item.bible_id || "";
-      option.textContent = item.code + " — " + item.name + " [" + item.provider + "]";
+      option.disabled = item.available === false;
+      option.textContent = item.code + " — " + item.name
+        + (item.available === false ? " (license required)" : "")
+        + " [" + item.provider + "]";
       select.appendChild(option);
     });
   }
@@ -217,11 +220,74 @@ $("#compare-btn").addEventListener("click", async () => {
   }
 });
 
+function firstObject(value) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value.length ? firstObject(value[0]) : null;
+  if (typeof value === "object") {
+    if (Array.isArray(value.data) && value.data.length) return firstObject(value.data[0]);
+    if (value.data && typeof value.data === "object") return firstObject(value.data);
+    return value;
+  }
+  return null;
+}
+
+function renderStrongStudy(data) {
+  const iq = firstObject(data.iq_bible);
+  const thayer = Array.isArray(data.thayer) && data.thayer.length ? data.thayer[0] : null;
+  let html = '<div class="section-label">LEXICON STUDY · ' + escapeHtml(data.strong_number) + '</div>';
+
+  if (iq) {
+    html += '<h2>' + escapeHtml(iq.word || iq.lemma || iq.key || data.strong_number) + '</h2>';
+    if (iq.transliteration || iq.pronunciation || iq.pronun) {
+      html += '<p><b>Transliteration / pronunciation:</b> ' +
+        escapeHtml(iq.transliteration || "") + ' ' + escapeHtml(iq.pronunciation || iq.pronun || "") + '</p>';
+    }
+    if (iq.glossary || iq.definition || iq.gloss) {
+      html += '<div class="ai-text"><b>Definition:</b><br>' +
+        renderText(iq.glossary || iq.definition || iq.gloss) + '</div>';
+    }
+    if (iq.occurences || iq.occurrences) {
+      html += '<p><b>Occurrences:</b> ' + escapeHtml(iq.occurences || iq.occurrences) + '</p>';
+    }
+  }
+
+  if (thayer) {
+    html += '<hr><div class="section-label">THAYER (LOCAL PUBLIC DOMAIN)</div>';
+    html += '<h3>' + escapeHtml(thayer.lemma || data.strong_number) + '</h3>';
+    if (thayer.grammar) html += '<p><b>Grammar:</b> ' + escapeHtml(thayer.grammar) + '</p>';
+    if (thayer.definition) html += '<div class="ai-text">' + renderText(thayer.definition) + '</div>';
+  }
+
+  if (!iq && !thayer) {
+    html += '<p>No lexicon entry was returned.</p>';
+  }
+
+  if (data.warnings && data.warnings.length) {
+    html += '<div class="status">' + data.warnings.map(escapeHtml).join("<br>") + '</div>';
+  }
+  return html;
+}
+
+function renderStudyContext(data) {
+  const d = data.data || {};
+  let html = '<div class="section-label">PASSAGE STUDY CONTEXT · ' + escapeHtml(data.reference) + '</div>';
+  const verse = firstObject(d);
+  if (verse) {
+    html += '<h2>' + escapeHtml(verse.name_en || verse.book || data.reference) + ' ' +
+      escapeHtml(verse.chapter || "") + ':' + escapeHtml(verse.verse || "") + '</h2>';
+    if (verse.text) html += '<div class="scripture-text">' + renderText(verse.text) + '</div>';
+    if (verse.version) html += '<p class="attribution">Source version: ' + escapeHtml(verse.version) + ' · IQ Bible API</p>';
+  } else {
+    html += '<p>Study context loaded, but this response did not contain a directly renderable verse object.</p>';
+  }
+  return html;
+}
+
 $("#strong-btn").addEventListener("click", async () => {
   setStatus("#word-status", "Loading lexicon…");
   try {
     const data = await api("/api/word-study/strongs/" + encodeURIComponent($("#strong-number").value.trim()));
-    $("#word-results").textContent = JSON.stringify(data, null, 2);
+    $("#word-results").innerHTML = renderStrongStudy(data);
     show("#word-results");
     setStatus("#word-status", "");
   } catch (e) {
@@ -230,10 +296,10 @@ $("#strong-btn").addEventListener("click", async () => {
 });
 
 $("#context-btn").addEventListener("click", async () => {
-  setStatus("#word-status", "Loading original-language/study context…");
+  setStatus("#word-status", "Loading passage study context…");
   try {
     const data = await api("/api/word-study/context?reference=" + encodeURIComponent($("#word-reference").value.trim()));
-    $("#word-results").textContent = JSON.stringify(data, null, 2);
+    $("#word-results").innerHTML = renderStudyContext(data);
     show("#word-results");
     setStatus("#word-status", "");
   } catch (e) {
