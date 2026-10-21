@@ -1,101 +1,291 @@
-const translationSelect = document.querySelector("#translation");
-const translationsList = document.querySelector("#translations-list");
-const statusBox = document.querySelector("#status");
-const scriptureCard = document.querySelector("#scripture");
-const passageTitle = document.querySelector("#passage-title");
-const passageText = document.querySelector("#passage-text");
-const attribution = document.querySelector("#attribution");
+const $ = (s) => document.querySelector(s);
+let translations = [];
 let currentReference = null;
+let currentTranslation = null;
 
-async function loadTranslations() {
-  const response = await fetch("/api/translations");
-  const items = await response.json();
-
-  translationSelect.innerHTML = "";
-  translationsList.innerHTML = "";
-
-  for (const item of items) {
-    if (item.available) {
-      const option = document.createElement("option");
-      option.value = item.code;
-      option.textContent = item.code + " — " + item.name;
-      translationSelect.appendChild(option);
-    }
-
-    const line = document.createElement("div");
-    line.className = "translation-line";
-    const state = item.available ? "installed" : item.access_mode;
-    line.textContent = item.code + " — " + item.name + " · " + state;
-    translationsList.appendChild(line);
-  }
-
-  if (!translationSelect.options.length) {
-    const option = document.createElement("option");
-    option.textContent = "No local translations installed";
-    option.disabled = true;
-    option.selected = true;
-    translationSelect.appendChild(option);
-  }
+async function api(path, options = {}) {
+  const response = await fetch(path, options);
+  let data = null;
+  try { data = await response.json(); } catch { data = {}; }
+  if (!response.ok) throw new Error(data.detail || data.message || ("HTTP " + response.status));
+  return data;
 }
 
-document.querySelector("#lookup-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (!translationSelect.value) return;
-
-  const reference = document.querySelector("#reference").value.trim();
-  const translation = translationSelect.value;
-  statusBox.textContent = "Loading…";
-
-  const url = "/api/passage?reference=" + encodeURIComponent(reference)
-    + "&translation=" + encodeURIComponent(translation);
-  const response = await fetch(url);
-  const data = await response.json();
-
-  if (!response.ok) {
-    scriptureCard.classList.add("hidden");
-    statusBox.textContent = data.detail || "Passage unavailable.";
-    return;
-  }
-
-  currentReference = data.reference;
-  passageTitle.textContent = data.reference + " — " + data.translation.name
-    + " (" + data.translation.code + ")";
-  passageText.innerHTML = data.verses
-    .map(v => "<p><sup>" + v.verse + "</sup> " + escapeHtml(v.text) + "</p>")
-    .join("");
-  attribution.textContent = data.translation.attribution || "";
-  scriptureCard.classList.remove("hidden");
-  statusBox.textContent = "";
-});
-
-document.querySelector("#save-note").addEventListener("click", async () => {
-  const note = document.querySelector("#note").value.trim();
-  if (!currentReference || !note || !translationSelect.value) {
-    statusBox.textContent = "Look up a passage and write a note first.";
-    return;
-  }
-
-  const response = await fetch("/api/notes", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      reference: currentReference,
-      translation: translationSelect.value,
-      note: note
-    })
-  });
-
-  statusBox.textContent = response.ok ? "Note saved." : "Could not save note.";
-  if (response.ok) document.querySelector("#note").value = "";
-});
-
 function escapeHtml(value) {
-  return value
+  return String(value ?? "")
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
 
-loadTranslations().catch(() => {
-  statusBox.textContent = "Could not load translation registry.";
+function renderText(value) {
+  return escapeHtml(value).replaceAll("\n", "<br>");
+}
+
+function setStatus(selector, value) {
+  $(selector).textContent = value || "";
+}
+
+function show(selector, yes = true) {
+  $(selector).classList.toggle("hidden", !yes);
+}
+
+document.querySelectorAll(".nav").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".nav").forEach(x => x.classList.remove("active"));
+    document.querySelectorAll(".view").forEach(x => x.classList.remove("active"));
+    btn.classList.add("active");
+    $("#view-" + btn.dataset.view).classList.add("active");
+  });
 });
+
+async function loadProviders() {
+  try {
+    const p = await api("/api/providers");
+    const bits = [
+      "YouVersion " + (p.youversion.configured ? "✓" : "—"),
+      "IQ Bible " + (p.iqbible.configured ? "✓" : "—"),
+      "Ollama " + (p.ollama.configured ? "✓" : "—"),
+    ];
+    $("#provider-status").textContent = bits.join(" · ");
+  } catch {
+    $("#provider-status").textContent = "Provider status unavailable";
+  }
+}
+
+async function loadTranslations() {
+  try {
+    translations = await api("/api/translations?language=en");
+  } catch (e) {
+    translations = [];
+    setStatus("#chat-status", "Could not load translations: " + e.message);
+  }
+
+  for (const selector of ["#translation", "#chat-translation"]) {
+    const select = $(selector);
+    select.innerHTML = "";
+    translations.forEach(item => {
+      const option = document.createElement("option");
+      option.value = item.code;
+      option.dataset.bibleId = item.bible_id || "";
+      option.textContent = item.code + " — " + item.name + " [" + item.provider + "]";
+      select.appendChild(option);
+    });
+  }
+
+  try {
+    const pref = await api("/api/settings/preferred_translation");
+    if (pref.value) {
+      for (const selector of ["#translation", "#chat-translation"]) {
+        const select = $(selector);
+        const option = [...select.options].find(x => x.value.toUpperCase() === pref.value.toUpperCase());
+        if (option) select.value = option.value;
+      }
+    }
+  } catch {}
+}
+
+function selectedBibleId(selector) {
+  const option = $(selector).selectedOptions[0];
+  return option && option.dataset.bibleId ? Number(option.dataset.bibleId) : null;
+}
+
+async function lookup(reference, translation, bibleId) {
+  let url = "/api/passage?reference=" + encodeURIComponent(reference)
+    + "&translation=" + encodeURIComponent(translation);
+  if (bibleId) url += "&bible_id=" + bibleId;
+  return api(url);
+}
+
+function renderScriptureCard(target, data) {
+  const t = data.translation || {};
+  const text = data.text || (data.verses || []).map(v => v.text).join(" ");
+  target.innerHTML =
+    '<div class="section-label">SCRIPTURE · ' + escapeHtml(data.provider || t.provider || "") + '</div>' +
+    '<h2>' + escapeHtml(data.reference) + ' — ' + escapeHtml(t.name || t.code || "") + '</h2>' +
+    '<div class="scripture-text">' + renderText(text) + '</div>' +
+    (t.attribution ? '<p class="attribution">' + escapeHtml(t.attribution) + '</p>' : "");
+}
+
+$("#lookup-btn").addEventListener("click", async () => {
+  setStatus("#lookup-status", "Loading Scripture…");
+  try {
+    const reference = $("#reference").value.trim();
+    const translation = $("#translation").value;
+    const data = await lookup(reference, translation, selectedBibleId("#translation"));
+    currentReference = data.reference;
+    currentTranslation = translation;
+    renderScriptureCard($("#scripture"), data);
+    show("#scripture");
+    setStatus("#lookup-status", "");
+    await api("/api/settings/preferred_translation", {
+      method: "PUT",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({value: translation})
+    });
+  } catch (e) {
+    show("#scripture", false);
+    setStatus("#lookup-status", e.message);
+  }
+});
+
+$("#save-note").addEventListener("click", async () => {
+  const note = $("#note").value.trim();
+  if (!currentReference || !note) {
+    setStatus("#lookup-status", "Look up a passage and write a note first.");
+    return;
+  }
+  try {
+    await api("/api/notes", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        reference: currentReference,
+        translation: currentTranslation,
+        note
+      })
+    });
+    $("#note").value = "";
+    setStatus("#lookup-status", "Note saved.");
+  } catch (e) {
+    setStatus("#lookup-status", e.message);
+  }
+});
+
+$("#ask-btn").addEventListener("click", async () => {
+  const question = $("#question").value.trim();
+  if (!question) return;
+  setStatus("#chat-status", "Studying sources and preparing answer…");
+  show("#ai-answer", false);
+  show("#scripture-answer", false);
+
+  try {
+    const translation = $("#chat-translation").value || "WEB";
+    const data = await api("/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        question,
+        translation,
+        bible_id: selectedBibleId("#chat-translation"),
+        mode: $("#chat-mode").value
+      })
+    });
+
+    if (data.scripture) {
+      renderScriptureCard($("#scripture-answer"), data.scripture);
+      show("#scripture-answer");
+    }
+
+    $("#ai-answer").innerHTML =
+      '<div class="section-label">STUDY / INTERPRETATION</div>' +
+      '<div class="ai-text">' + renderText(data.answer) + '</div>' +
+      '<div class="source-strip">' +
+      (data.sources || []).map(s => '<span>' + escapeHtml(s.name) + ' · ' + escapeHtml(s.type) + '</span>').join("") +
+      '</div>';
+    show("#ai-answer");
+    setStatus("#chat-status", data.ai_available ? "" : "Local AI is offline; start Ollama for explanations.");
+  } catch (e) {
+    setStatus("#chat-status", e.message);
+  }
+});
+
+$("#compare-btn").addEventListener("click", async () => {
+  setStatus("#compare-status", "Comparing translations…");
+  $("#comparison-results").innerHTML = "";
+  try {
+    const ref = $("#compare-reference").value.trim();
+    const list = $("#compare-translations").value.trim();
+    const data = await api("/api/compare?reference=" + encodeURIComponent(ref) + "&translations=" + encodeURIComponent(list));
+    for (const item of data.comparisons) {
+      const card = document.createElement("section");
+      card.className = "card";
+      if (item.status !== "ok") {
+        card.innerHTML = '<h3>' + escapeHtml(item.translation) + '</h3><p class="error">' + escapeHtml(item.error) + '</p>';
+      } else {
+        const r = item.result;
+        card.innerHTML =
+          '<div class="section-label">' + escapeHtml(item.translation) + ' · ' + escapeHtml(r.provider) + '</div>' +
+          '<div class="scripture-text">' + renderText(r.text) + '</div>' +
+          (r.translation.attribution ? '<p class="attribution">' + escapeHtml(r.translation.attribution) + '</p>' : "");
+      }
+      $("#comparison-results").appendChild(card);
+    }
+    setStatus("#compare-status", "");
+  } catch (e) {
+    setStatus("#compare-status", e.message);
+  }
+});
+
+$("#strong-btn").addEventListener("click", async () => {
+  setStatus("#word-status", "Loading lexicon…");
+  try {
+    const data = await api("/api/word-study/strongs/" + encodeURIComponent($("#strong-number").value.trim()));
+    $("#word-results").textContent = JSON.stringify(data, null, 2);
+    show("#word-results");
+    setStatus("#word-status", "");
+  } catch (e) {
+    setStatus("#word-status", e.message);
+  }
+});
+
+$("#context-btn").addEventListener("click", async () => {
+  setStatus("#word-status", "Loading original-language/study context…");
+  try {
+    const data = await api("/api/word-study/context?reference=" + encodeURIComponent($("#word-reference").value.trim()));
+    $("#word-results").textContent = JSON.stringify(data, null, 2);
+    show("#word-results");
+    setStatus("#word-status", "");
+  } catch (e) {
+    setStatus("#word-status", e.message);
+  }
+});
+
+async function loadMemorization() {
+  try {
+    const items = await api("/api/memorization");
+    $("#memorization-list").innerHTML = items.length
+      ? items.map(x => '<div class="memory-item"><b>' + escapeHtml(x.reference) + '</b> · ' +
+          escapeHtml(x.translation) + '<br><small>✓ ' + x.correct_count + ' · ✗ ' + x.incorrect_count + '</small></div>').join("")
+      : '<p class="muted">No memorization verses yet.</p>';
+  } catch {}
+}
+
+$("#memorize-btn").addEventListener("click", async () => {
+  try {
+    await api("/api/memorization", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        reference: $("#memory-reference").value.trim(),
+        translation: $("#memory-translation").value.trim()
+      })
+    });
+    await loadMemorization();
+  } catch (e) {
+    alert(e.message);
+  }
+});
+
+$("#plan-btn").addEventListener("click", async () => {
+  $("#plan-output").textContent = "Generating…";
+  try {
+    const data = await api("/api/study-plans", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        title: $("#plan-title").value.trim() || "Bible Study Plan",
+        topic: $("#plan-topic").value.trim(),
+        days: Number($("#plan-days").value || 7),
+        generate: true
+      })
+    });
+    $("#plan-output").innerHTML = data.generated
+      ? '<div class="ai-text">' + renderText(data.generated.answer) + '</div>'
+      : '<p>Plan saved.</p>';
+  } catch (e) {
+    $("#plan-output").textContent = e.message;
+  }
+});
+
+Promise.all([loadProviders(), loadTranslations(), loadMemorization()]);
