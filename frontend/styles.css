@@ -1,0 +1,81 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #1f2933;
+  background: #f5f3ee;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+main { width: min(900px, calc(100% - 32px)); margin: 48px auto; }
+header { margin-bottom: 24px; }
+h1 { margin: 0; font-family: Georgia, serif; font-size: 42px; }
+header p { margin-top: 8px; color: #65737e; }
+
+.card {
+  background: white;
+  border: 1px solid #dedbd2;
+  border-radius: 16px;
+  padding: 22px;
+  margin: 16px 0;
+  box-shadow: 0 10px 30px rgba(40, 35, 25, 0.05);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 220px auto;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+input, select, textarea, button { font: inherit; }
+
+input, select, textarea {
+  width: 100%;
+  border: 1px solid #cfcac0;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+}
+
+button {
+  border: 0;
+  border-radius: 10px;
+  padding: 12px 18px;
+  background: #273c2c;
+  color: white;
+  cursor: pointer;
+}
+
+.section-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .12em;
+  color: #7c6f57;
+}
+
+#passage-text {
+  font-family: Georgia, serif;
+  font-size: 20px;
+  line-height: 1.65;
+}
+
+#passage-text p { margin: .6em 0; }
+sup { color: #7c6f57; font-size: .65em; }
+
+.muted, .translation-line {
+  color: #687078;
+  font-size: 14px;
+}
+
+.translation-line {
+  padding: 7px 0;
+  border-bottom: 1px solid #eeeae1;
+}
+
+.status { color: #8a4b2b; min-height: 20px; }
+.hidden { display: none; }
+
+@media (max-width: 700px) {
+  .row { grid-template-columns: 1fr; }
+  main { margin-top: 24px; }
+}
