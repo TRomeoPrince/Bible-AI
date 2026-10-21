@@ -12,6 +12,7 @@ from backend.bible.references import extract_reference, parse_reference
 from backend.database import connect, init_db
 from backend.integrations.iqbible import IQBibleClient
 from backend.integrations.youversion import YouVersionClient
+from backend.languages.thayer import ThayerLexicon
 from backend.services.scripture import ScriptureService
 from backend.study.repository import (
     add_memory,
@@ -34,6 +35,7 @@ scripture = ScriptureService()
 study_ai = StudyAI()
 iq = IQBibleClient()
 youversion = YouVersionClient()
+thayer = ThayerLexicon(ROOT / "data" / "lexicons" / "thayer_lexicon.jsonl")
 
 
 class NoteCreate(BaseModel):
@@ -115,6 +117,10 @@ async def providers():
             "model": study_ai.ollama.model,
             "purpose": "Local AI reasoning/explanation",
         },
+        "thayer": {
+            "configured": thayer.installed,
+            "purpose": "Local public-domain Greek lexicon",
+        },
     }
 
 
@@ -148,14 +154,17 @@ async def compare(reference: str, translations: str = "KJV,NIV,BSB"):
 async def strongs_lookup(strong_number: str):
     if not iq.configured:
         raise HTTPException(status_code=503, detail="IQ Bible API is not configured.")
+    local_thayer = thayer.lookup(strong_number)
     try:
-        return {
-            "strong_number": strong_number.upper(),
-            "provider": "IQ Bible API",
-            "data": await iq.strongs(strong_number),
-        }
+        iq_data = await iq.strongs(strong_number)
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+        iq_data = {"error": str(exc)}
+    return {
+        "strong_number": strong_number.upper(),
+        "providers": ["IQ Bible API"] + (["Thayer local"] if local_thayer else []),
+        "iq_bible": iq_data,
+        "thayer": local_thayer,
+    }
 
 
 @app.get("/api/word-study/context")
