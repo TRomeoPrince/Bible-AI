@@ -76,6 +76,12 @@ class ChatRequest(BaseModel):
     mode: str = "study"
 
 
+class ToolRequest(BaseModel):
+    topic: str
+    reference: str | None = None
+    count: int = Field(default=10, ge=1, le=50)
+
+
 @app.on_event("startup")
 def startup() -> None:
     init_db()
@@ -188,6 +194,10 @@ async def chat(payload: ChatRequest):
             detected = extracted.canonical()
 
     translation = payload.translation or get_setting("preferred_translation", "WEB") or "WEB"
+    set_setting("preferred_translation", translation)
+    if detected:
+        add_memory("passage", detected, detected)
+    add_memory("question", payload.question, detected)
     display = None
     if detected:
         try:
@@ -216,6 +226,36 @@ async def chat(payload: ChatRequest):
         )
 
     return result
+
+
+@app.post("/api/tools/quiz")
+async def generate_quiz(payload: ToolRequest):
+    prompt = (
+        f"Create a {payload.count}-question Bible study quiz on {payload.topic}. "
+        "Use a mixture of recall, context, interpretation, and reference-identification questions. "
+        "Do not invent verse wording. Put the answer key after the questions."
+    )
+    return await study_ai.answer(prompt, reference=payload.reference, mode="quiz")
+
+
+@app.post("/api/tools/topic-study")
+async def topic_study(payload: ToolRequest):
+    prompt = (
+        f"Build a serious Bible topic study on: {payload.topic}. "
+        "Give representative passages, canonical development, context cautions, "
+        "and major Christian interpretations where the topic is disputed."
+    )
+    return await study_ai.answer(prompt, reference=payload.reference, mode="topic_study")
+
+
+@app.post("/api/tools/book-summary")
+async def book_summary(payload: ToolRequest):
+    prompt = (
+        f"Give a serious study summary of the biblical book {payload.topic}: "
+        "setting, authorship/date discussion, structure, outline, major themes, key passages, "
+        "New/Old Testament connections where appropriate, and study questions."
+    )
+    return await study_ai.answer(prompt, reference=payload.reference, mode="book_summary")
 
 
 @app.get("/api/chat/history")
