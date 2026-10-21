@@ -152,16 +152,27 @@ async def compare(reference: str, translations: str = "KJV,NIV,BSB"):
 
 @app.get("/api/word-study/strongs/{strong_number}")
 async def strongs_lookup(strong_number: str):
-    if not iq.configured:
-        raise HTTPException(status_code=503, detail="IQ Bible API is not configured.")
     local_thayer = thayer.lookup(strong_number)
-    try:
-        iq_data = await iq.strongs(strong_number)
-    except Exception as exc:
-        iq_data = {"error": str(exc)}
+    if iq.configured:
+        try:
+            iq_data = await iq.strongs(strong_number)
+        except Exception as exc:
+            iq_data = {"error": str(exc)}
+    else:
+        iq_data = {"error": "IQ Bible API is not configured."}
+
+    providers = []
+    if iq.configured:
+        providers.append("IQ Bible API")
+    if local_thayer:
+        providers.append("Thayer local")
+
+    if not providers:
+        raise HTTPException(status_code=503, detail="No lexicon provider is currently available.")
+
     return {
         "strong_number": strong_number.upper(),
-        "providers": ["IQ Bible API"] + (["Thayer local"] if local_thayer else []),
+        "providers": providers,
         "iq_bible": iq_data,
         "thayer": local_thayer,
     }
