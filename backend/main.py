@@ -6,6 +6,8 @@ from pydantic import BaseModel
 
 from backend.bible.registry import list_translations, local_provider
 from backend.database import connect, init_db
+from backend.integrations.iqbible import IQBibleClient
+from backend.integrations.youversion import YouVersionClient
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +31,26 @@ def startup() -> None:
 @app.get("/api/health")
 def health():
     return {"status": "ok", "app": "Bible-AI", "version": "0.1.0"}
+
+
+@app.get("/api/providers")
+def providers():
+    youversion = YouVersionClient()
+    iqbible = IQBibleClient()
+    return {
+        "youversion": {
+            "configured": youversion.configured,
+            "purpose": "Licensed Scripture retrieval/display"
+        },
+        "iqbible": {
+            "configured": iqbible.configured,
+            "purpose": "Original-language, Strong's, lexicon and study enrichment"
+        },
+        "local_scripture": {
+            "configured": True,
+            "installed_translations": [t.code for t in local_provider.translations()]
+        }
+    }
 
 
 @app.get("/api/translations")
