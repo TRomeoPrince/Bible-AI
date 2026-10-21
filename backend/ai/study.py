@@ -16,7 +16,20 @@ Rules:
 5. Prefer the supplied source material. Do not claim a source says something absent from it.
 6. Be concise but scholarly. Use references when supplied.
 7. Original-language claims must be grounded in supplied Greek/Hebrew/lexicon data.
+8. Never silently substitute one Bible translation for another.
 """
+
+MODE_GUIDANCE = {
+    "study": "Explain the passage in literary and historical context, then interpretation and application.",
+    "theology": "Compare the major Christian interpretations fairly. Name traditions/views, their key biblical arguments, and major objections.",
+    "apologetics": "Separate historical/evidential claims from philosophical interpretation and from faith commitments.",
+    "history": "Focus on biblical/church historical context, primary-source chronology, councils, movements, and development of doctrine.",
+    "language": "Focus on Hebrew/Greek forms, lemmas, Strong's, morphology, semantic range, and occurrences. Avoid etymological fallacies.",
+    "study_plan": "Create a practical progressive study plan using references, goals, questions, and memorization prompts.",
+    "quiz": "Create a fair study quiz. Do not invent verse wording. Include an answer key separately.",
+    "book_summary": "Summarize structure, authorship/date debates where relevant, historical setting, themes, outline, and major passages.",
+    "topic_study": "Build a canonical topic study using representative passages, context, interpretive cautions, and major theological views where disputed.",
+}
 
 
 class StudyAI:
@@ -68,10 +81,11 @@ class StudyAI:
         payload = {
             "reference": reference,
             "mode": mode,
+            "mode_guidance": MODE_GUIDANCE.get(mode, MODE_GUIDANCE["study"]),
             "study_context": context,
         }
         if scripture_display:
-            # Display-only Scripture is labelled separately; IQ Bible context is the preferred AI study grounding.
+            # YouVersion text remains a separate display layer unless its applicable terms permit AI grounding.
             payload["scripture_display_metadata"] = {
                 "reference": scripture_display.get("reference"),
                 "translation": scripture_display.get("translation"),
@@ -81,10 +95,11 @@ class StudyAI:
         user_prompt = (
             f"Question: {question}\n\n"
             f"Mode: {mode}\n"
+            f"Mode guidance: {payload['mode_guidance']}\n"
             f"Reference: {reference or 'none explicitly detected'}\n\n"
             "SOURCE MATERIAL (JSON):\n"
             + json.dumps(payload, ensure_ascii=False)[:40000]
-            + "\n\nAnswer with clear section labels where useful."
+            + "\n\nAnswer with clear section labels where useful. Distinguish source facts from interpretation."
         )
         answer = await self.ollama.chat([
             {"role": "system", "content": SYSTEM_PROMPT},
