@@ -16,4 +16,4 @@ jobs:
       - run: python -m pip install --upgrade pip
       - run: pip install -r requirements.txt pytest
       - run: python -m compileall backend
-      - run: pytest -q
+      - run: python -m pytest -q
