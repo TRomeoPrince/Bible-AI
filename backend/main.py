@@ -96,6 +96,7 @@ async def health():
         "app": "Bible-AI",
         "version": "0.8.0",
         "ollama": await study_ai.ollama.available(),
+        "ollama_model_available": await study_ai.ollama.model_available(),
         "youversion_configured": youversion.configured,
         "iqbible_configured": iq.configured,
     }
@@ -115,6 +116,7 @@ async def providers():
         "ollama": {
             "configured": await study_ai.ollama.available(),
             "model": study_ai.ollama.model,
+            "model_available": await study_ai.ollama.model_available(),
             "purpose": "Local AI reasoning/explanation",
         },
         "thayer": {
@@ -125,8 +127,8 @@ async def providers():
 
 
 @app.get("/api/translations")
-async def translations(language: str = "en"):
-    return await scripture.list_translations(language)
+async def translations(language: str = "en", include_unlicensed: bool = False):
+    return await scripture.list_translations(language, include_unlicensed=include_unlicensed)
 
 
 @app.get("/api/passage")
@@ -152,29 +154,37 @@ async def compare(reference: str, translations: str = "KJV,NIV,BSB"):
 
 @app.get("/api/word-study/strongs/{strong_number}")
 async def strongs_lookup(strong_number: str):
-    local_thayer = thayer.lookup(strong_number)
+    strong = strong_number.upper().strip()
+    if not strong or strong[0] not in ("G", "H"):
+        raise HTTPException(status_code=400, detail="Use a Strong's number such as G26 or H7225.")
+
+    local_thayer = []
+    local_error = None
+    try:
+        local_thayer = thayer.lookup(strong)
+    except Exception as exc:
+        local_error = str(exc)
+
+    iq_data = None
+    iq_error = None
     if iq.configured:
         try:
-            iq_data = await iq.strongs(strong_number)
+            iq_data = await iq.strongs(strong)
         except Exception as exc:
-            iq_data = {"error": str(exc)}
-    else:
-        iq_data = {"error": "IQ Bible API is not configured."}
+            iq_error = str(exc)
 
     providers = []
-    if iq.configured:
+    if iq_data is not None:
         providers.append("IQ Bible API")
     if local_thayer:
         providers.append("Thayer local")
 
-    if not providers:
-        raise HTTPException(status_code=503, detail="No lexicon provider is currently available.")
-
     return {
-        "strong_number": strong_number.upper(),
+        "strong_number": strong,
         "providers": providers,
         "iq_bible": iq_data,
         "thayer": local_thayer,
+        "warnings": [x for x in [iq_error, local_error] if x],
     }
 
 
@@ -231,12 +241,15 @@ async def chat(payload: ChatRequest):
             ("user", payload.question, detected, payload.mode),
         )
 
-    result = await study_ai.answer(
-        question=payload.question,
-        reference=detected,
-        mode=payload.mode,
-        scripture_display=display,
-    )
+    try:
+        result = await study_ai.answer(
+            question=payload.question,
+            reference=detected,
+            mode=payload.mode,
+            scripture_display=display,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     result["scripture"] = display
 
     with connect() as con:
